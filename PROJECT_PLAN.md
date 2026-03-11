@@ -132,3 +132,33 @@ project_120925_Honcharov_Vitalii/
 ## 💡 Next Step
 
 Start with `mysql_connector.py`: implement search functions and test with real sakila DB.
+
+
+пролистование не долно работать в бесконечность
+# подумать над аннотацией
+env_path = os.path.join(os.path.dirname(__file__), '.env')
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+else:
+    # fallback to environment -------------ЗАДАТЬ ВОПРОСЫ
+    load_dotenv()
+
+
+def mongoagr(key_word):
+    result = mongoconn().aggregate([
+    {
+        '$group': {
+            '_id': '$name_film', 
+            'total': {
+                '$sum': 1
+            }
+        }
+    }, {
+        '$sort': {
+            'total': -1
+        }
+    }, {
+        '$limit': 5
+    }
+])
+    return result

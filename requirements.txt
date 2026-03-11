@@ -2,4 +2,3 @@ pymysql
 pymongo
 python-dotenv
 tabulate
-PyPDF2
