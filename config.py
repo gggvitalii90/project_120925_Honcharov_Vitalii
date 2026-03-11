@@ -1,18 +1,13 @@
 import os
-# from pathlib import Path 
-# новый модуль для работы с путями,
-# в данном случае не нужен, так как все пути в виде строк
 from dotenv import load_dotenv
 # модуль для загрузки переменных окружения из .env файла,
 # который может содержать конфиденциальные данные
 
 
-# подумать над аннотацией
 env_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(env_path):
     load_dotenv(env_path)
 else:
-    # fallback to environment -------------ЗАДАТЬ ВОПРОСЫ
     load_dotenv()
 
 # env = environment (переменные окружения)
@@ -35,8 +30,9 @@ MONGO_COLLECTION = os.getenv(
     'MONGO_COLLECTION', 'final_project_group_name'
 )
 
+
 def show_config():
-    # Только для отладки (секреты не выводятся в логи).
+    # Для разработчика: показываем конфиг без паролей (для отладки)
     return {
         'mysql_host': MYSQL_CONFIG['host'],
         'mysql_db': MYSQL_CONFIG['db'],

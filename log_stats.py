@@ -1,39 +1,39 @@
 """MongoDB statistics helper."""
-from config import MONGO_URI, MONGO_DB, MONGO_COLLECTION
-from pymongo import MongoClient
+from mongo_connector import MongoConnector
+
 
 class LogStats:
-    def __init__(self):
-        self.client = None
-        self.col = None
-        self.connected = False
+    """Читает статистику поисков из MongoDB через коннектор."""
 
-    def connect(self):
-        try:
-            self.client = MongoClient(MONGO_URI)
-            self.col = self.client[MONGO_DB][MONGO_COLLECTION]
-            self.connected = True
-        except Exception as e:
-            print(f'Ошибка подключения к MongoDB: {e}')
-            self.connected = False
+    def __init__(self, mongo_connector: MongoConnector):
+        self.mongo_connector = mongo_connector
+
+    def is_connected(self):
+        # Перед показом статистики проверяем, доступна ли MongoDB.
+        return self.mongo_connector.connected
 
     def get_top(self, n: int = 5, search_type: str = None):
         if search_type is None:
             print('Ошибка: search_type не передан')
             return []
-        
+
         # Для разных типов поиска разные структуры params,
-        # поэтому используем разные pipelines с $toLower 
-        # для case-insensitive группировки
+        # поэтому используем разные pipelines с $toLower
         if search_type == 'keyword':
             pipeline = [
                 {'$match': {'search_type': search_type}},
+                {'$sort': {'timestamp': -1}},
                 {
                     '$group': {
                         '_id': {
                             'keyword': {'$toLower': '$params.keyword'}
                         },
-                        'count': {'$sum': 1}
+                        # Сколько раз этот запрос встречался
+                        'count': {'$sum': 1},
+                        # Дата последнего такого запроса
+                        'last_date': {'$first': '$timestamp'},
+                        # Сколько фильмов нашлось в последний раз
+                        'results_count': {'$first': '$results_count'}
                     }
                 },
                 {'$sort': {'count': -1}},
@@ -42,6 +42,7 @@ class LogStats:
         elif search_type == 'genre_and_year':
             pipeline = [
                 {'$match': {'search_type': search_type}},
+                {'$sort': {'timestamp': -1}},
                 {
                     '$group': {
                         '_id': {
@@ -49,7 +50,12 @@ class LogStats:
                             'year_from': '$params.year_from',
                             'year_to': '$params.year_to'
                         },
-                        'count': {'$sum': 1}
+                        # Сколько раз искали этот жанр/диапазон
+                        'count': {'$sum': 1},
+                        # Дата последнего такого запроса
+                        'last_date': {'$first': '$timestamp'},
+                        # Сколько фильмов нашлось в последний раз
+                        'results_count': {'$first': '$results_count'}
                     }
                 },
                 {'$sort': {'count': -1}},
@@ -57,37 +63,38 @@ class LogStats:
             ]
         else:
             return []
-        
-        result = list(self.col.aggregate(pipeline))
+
+        result = list(self.mongo_connector.col.aggregate(pipeline))
         return result
 
     def get_recent(self, n: int = 5):
         """Получить последние N УНИКАЛЬНЫХ поисков."""
         pipeline = [
-            # Шаг 1: Группируем по ключу (search_type + params)
+            # Шаг 1: Сначала сортируем по времени, чтобы $first взял
+            # самый новый документ в каждой группе
+            {'$sort': {'timestamp': -1}},
+
+            # Шаг 2: Группируем по ключу (search_type + params)
             {
                 '$group': {
                     '_id': {
                         'search_type': '$search_type',
                         'params': '$params'
                     },
-                    'timestamp': {'$max': '$timestamp'},  # Последняя дата
+                    'timestamp': {'$first': '$timestamp'},
                     'search_type': {'$first': '$search_type'},
                     'params': {'$first': '$params'},
-                    'count': {'$sum': 1}  # Сколько раз делали этот запрос
+                    'results_count': {'$first': '$results_count'},
+                    'count': {'$sum': 1}
                 }
             },
-            
-            # Шаг 2: Сортируем по дате (новые первые)
+
+            # Шаг 3: Сортируем по дате (новые первые)
             {'$sort': {'timestamp': -1}},
-            
-            # Шаг 3: Берём первые N
+
+            # Шаг 4: Берём первые N
             {'$limit': n}
         ]
-        
-        result = list(self.col.aggregate(pipeline))
-        return result
 
-    def close(self):
-        if self.client:
-            self.client.close()
+        result = list(self.mongo_connector.col.aggregate(pipeline))
+        return result
